@@ -17,3 +17,6 @@
 from .config import RobotConfig
 from .robot import Robot
 from .utils import make_robot_from_config
+
+# Import robot configs to ensure they're registered with draccus ChoiceRegistry
+from .bi_so101_follower import BiSO101FollowerConfig  # noqa: F401

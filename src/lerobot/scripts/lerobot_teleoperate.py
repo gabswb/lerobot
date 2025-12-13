@@ -49,6 +49,48 @@ lerobot-teleoperate \
   --display_data=true
 ```
 
+Example teleoperation with bimanual so101:
+
+```shell
+lerobot-teleoperate \
+  --robot.type=bi_so101_follower \
+  --robot.left_arm_port=/dev/tty.usbmodem5A460851411 \
+  --robot.right_arm_port=/dev/tty.usbmodem5A460812391 \
+  --robot.id=bimanual_follower \
+  --robot.cameras='{
+    left: {"type": "opencv", "index_or_path": 0, "width": 1920, "height": 1080, "fps": 30},
+    top: {"type": "opencv", "index_or_path": 1, "width": 1920, "height": 1080, "fps": 30},
+    right: {"type": "opencv", "index_or_path": 2, "width": 1920, "height": 1080, "fps": 30}
+  }' \
+  --teleop.type=bi_so101_leader \
+  --teleop.left_arm_port=/dev/tty.usbmodem5A460828611 \
+  --teleop.right_arm_port=/dev/tty.usbmodem5A460826981 \
+  --teleop.id=bimanual_leader \
+  --display_data=true
+```
+
+Example with existing calibration files (using per-arm IDs):
+
+```shell
+lerobot-teleoperate \
+  --robot.type=bi_so101_follower \
+  --robot.left_arm_port=/dev/tty.usbmodem5A460851411 \
+  --robot.right_arm_port=/dev/tty.usbmodem5A460812391 \
+  --robot.left_arm_id=my_left_arm \
+  --robot.right_arm_id=my_right_arm \
+  --robot.cameras='{
+    left: {"type": "opencv", "index_or_path": 0, "width": 1920, "height": 1080, "fps": 30},
+    top: {"type": "opencv", "index_or_path": 1, "width": 1920, "height": 1080, "fps": 30},
+    right: {"type": "opencv", "index_or_path": 2, "width": 1920, "height": 1080, "fps": 30}
+  }' \
+  --teleop.type=bi_so101_leader \
+  --teleop.left_arm_port=/dev/tty.usbmodem5A460828611 \
+  --teleop.right_arm_port=/dev/tty.usbmodem5A460826981 \
+  --teleop.left_arm_id=my_left_leader \
+  --teleop.right_arm_id=my_right_leader \
+  --display_data=true
+```
+
 """
 
 import logging
@@ -71,6 +113,7 @@ from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
     bi_so100_follower,
+    bi_so101_follower,
     earthrover_mini_plus,
     hope_jr,
     koch_follower,
@@ -82,6 +125,7 @@ from lerobot.teleoperators import (  # noqa: F401
     Teleoperator,
     TeleoperatorConfig,
     bi_so100_leader,
+    bi_so101_leader,
     gamepad,
     homunculus,
     keyboard,

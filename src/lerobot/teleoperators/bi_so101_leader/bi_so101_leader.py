@@ -17,42 +17,41 @@
 import logging
 from functools import cached_property
 
-from lerobot.teleoperators.so100_leader.config_so100_leader import SO100LeaderConfig
-from lerobot.teleoperators.so100_leader.so100_leader import SO100Leader
+from lerobot.teleoperators.so101_leader.config_so101_leader import SO101LeaderConfig
+from lerobot.teleoperators.so101_leader.so101_leader import SO101Leader
 
 from ..teleoperator import Teleoperator
-from .config_bi_so100_leader import BiSO100LeaderConfig
+from .config_bi_so101_leader import BiSO101LeaderConfig
 
 logger = logging.getLogger(__name__)
 
 
-class BiSO100Leader(Teleoperator):
+class BiSO101Leader(Teleoperator):
     """
-    [Bimanual SO-100 Leader Arms](https://github.com/TheRobotStudio/SO-ARM100) designed by TheRobotStudio
-    This bimanual leader arm can also be easily adapted to use SO-101 leader arms, just replace the SO100Leader class with SO101Leader and SO100LeaderConfig with SO101LeaderConfig.
+    [Bimanual SO-101 Leader Arms](https://github.com/TheRobotStudio/SO-ARM100) designed by TheRobotStudio and Hugging Face
     """
 
-    config_class = BiSO100LeaderConfig
-    name = "bi_so100_leader"
+    config_class = BiSO101LeaderConfig
+    name = "bi_so101_leader"
 
-    def __init__(self, config: BiSO100LeaderConfig):
+    def __init__(self, config: BiSO101LeaderConfig):
         super().__init__(config)
         self.config = config
 
-        left_arm_config = SO100LeaderConfig(
+        left_arm_config = SO101LeaderConfig(
             id=config.left_arm_id or (f"{config.id}_left" if config.id else None),
             calibration_dir=config.calibration_dir,
             port=config.left_arm_port,
         )
 
-        right_arm_config = SO100LeaderConfig(
+        right_arm_config = SO101LeaderConfig(
             id=config.right_arm_id or (f"{config.id}_right" if config.id else None),
             calibration_dir=config.calibration_dir,
             port=config.right_arm_port,
         )
 
-        self.left_arm = SO100Leader(left_arm_config)
-        self.right_arm = SO100Leader(right_arm_config)
+        self.left_arm = SO101Leader(left_arm_config)
+        self.right_arm = SO101Leader(right_arm_config)
 
     @cached_property
     def action_features(self) -> dict[str, type]:
@@ -119,3 +118,4 @@ class BiSO100Leader(Teleoperator):
     def disconnect(self) -> None:
         self.left_arm.disconnect()
         self.right_arm.disconnect()
+

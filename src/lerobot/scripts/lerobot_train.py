@@ -124,6 +124,73 @@ def update_policy(
     return train_metrics, output_dict
 
 
+def eval_policy_on_dataset(
+    policy: PreTrainedPolicy,
+    eval_dataset,
+    preprocessor,
+    accelerator: Accelerator,
+    batch_size: int = 32,
+) -> dict:
+    """
+    Evaluate a policy on a dataset by computing the loss on each sample.
+
+    Args:
+        policy: The policy model to evaluate.
+        eval_dataset: The evaluation dataset.
+        preprocessor: The preprocessor pipeline for the dataset.
+        accelerator: The Accelerator instance for distributed training.
+        batch_size: Batch size for evaluation.
+
+    Returns:
+        A dictionary containing evaluation metrics:
+        - "eval_loss": Average loss across all samples
+        - "eval_s": Evaluation time in seconds
+        - "n_samples": Number of samples evaluated
+    """
+    import time
+    start_time = time.perf_counter()
+    
+    policy.eval()
+    
+    # Create dataloader for evaluation dataset
+    eval_dataloader = torch.utils.data.DataLoader(
+        eval_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,  # Use 0 workers for evaluation to avoid overhead
+        pin_memory=accelerator.device.type == "cuda",
+        drop_last=False,
+    )
+    
+    # Prepare dataloader with accelerator
+    eval_dataloader = accelerator.prepare(eval_dataloader)
+    
+    total_loss = 0.0
+    n_samples = 0
+    
+    with torch.no_grad():
+        for batch in eval_dataloader:
+            batch = preprocessor(batch)
+            
+            # Compute loss
+            with accelerator.autocast():
+                loss, _ = policy.forward(batch)
+            
+            # Accumulate loss (loss is already averaged over batch)
+            batch_size_actual = batch[list(batch.keys())[0]].shape[0] if batch else 1
+            total_loss += loss.item() * batch_size_actual
+            n_samples += batch_size_actual
+    
+    avg_loss = total_loss / n_samples if n_samples > 0 else float("nan")
+    eval_time = time.perf_counter() - start_time
+    
+    return {
+        "eval_loss": avg_loss,
+        "eval_s": eval_time,
+        "n_samples": n_samples,
+    }
+
+
 @parser.wrap()
 def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     """
@@ -189,6 +256,22 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
     # Now all other processes can safely load the dataset
     if not is_main_process:
         dataset = make_dataset(cfg)
+
+    # Load evaluation dataset if specified
+    eval_dataset = None
+    if cfg.eval_freq > 0 and cfg.eval_dataset is not None:
+        if is_main_process:
+            logging.info("Creating eval dataset")
+        # Create a temporary config for the eval dataset
+        # We need to create a config with eval_dataset as the dataset field
+        import copy
+        eval_cfg = copy.deepcopy(cfg)
+        eval_cfg.dataset = cfg.eval_dataset
+        eval_cfg.eval_freq = 0  # Don't create nested eval datasets
+        eval_dataset = make_dataset(eval_cfg)
+        accelerator.wait_for_everyone()
+        if not is_main_process:
+            eval_dataset = make_dataset(eval_cfg)
 
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
@@ -353,6 +436,10 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
         is_saving_step = step % cfg.save_freq == 0 or step == cfg.steps
         is_eval_step = cfg.eval_freq > 0 and step % cfg.eval_freq == 0
 
+        # Log train loss to wandb every 100 steps
+        if wandb_logger and step % 100 == 0 and is_main_process:
+            wandb_logger.log_dict({"train_loss": train_tracker.loss.avg}, step)
+
         if is_log_step:
             logging.info(train_tracker)
             if wandb_logger:
@@ -382,6 +469,36 @@ def train(cfg: TrainPipelineConfig, accelerator: Accelerator | None = None):
 
             accelerator.wait_for_everyone()
 
+        # Evaluate on dataset if eval_dataset is specified
+        if cfg.eval_dataset and is_eval_step:
+            if is_main_process:
+                logging.info(f"Evaluating policy on eval dataset at step {step}")
+            with torch.no_grad(), accelerator.autocast():
+                eval_info = eval_policy_on_dataset(
+                    policy=accelerator.unwrap_model(policy),
+                    eval_dataset=eval_dataset,
+                    preprocessor=preprocessor,
+                    accelerator=accelerator,
+                    batch_size=cfg.batch_size,
+                )
+            if is_main_process:
+                logging.info(
+                    f"Eval dataset metrics - Loss: {eval_info['eval_loss']:.4f}, "
+                    f"Samples: {eval_info['n_samples']}, Time: {eval_info['eval_s']:.2f}s"
+                )
+                if wandb_logger:
+                    wandb_logger.log_dict(
+                        {
+                            "eval_loss": eval_info["eval_loss"],
+                            "eval_n_samples": eval_info["n_samples"],
+                            "eval_time": eval_info["eval_s"],
+                        },
+                        step,
+                        mode="eval",
+                    )
+            accelerator.wait_for_everyone()
+
+        # Evaluate on environment if env is specified
         if cfg.env and is_eval_step:
             if is_main_process:
                 step_id = get_step_identifier(step, cfg.steps)

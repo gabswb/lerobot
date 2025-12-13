@@ -14,18 +14,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from ..config import TeleoperatorConfig
+from lerobot.cameras import CameraConfig
+
+from ..config import RobotConfig
 
 
-@TeleoperatorConfig.register_subclass("bi_so100_leader")
+@RobotConfig.register_subclass("bi_so101_follower")
 @dataclass
-class BiSO100LeaderConfig(TeleoperatorConfig):
+class BiSO101FollowerConfig(RobotConfig):
     left_arm_port: str
     right_arm_port: str
-    
+
     # Optional: Individual IDs for each arm (for using existing calibration files)
     # If not provided, will use {id}_left and {id}_right
     left_arm_id: str | None = None
     right_arm_id: str | None = None
+
+    # Optional
+    left_arm_disable_torque_on_disconnect: bool = True
+    left_arm_max_relative_target: float | dict[str, float] | None = None
+    left_arm_use_degrees: bool = False
+    right_arm_disable_torque_on_disconnect: bool = True
+    right_arm_max_relative_target: float | dict[str, float] | None = None
+    right_arm_use_degrees: bool = False
+
+    # cameras (shared between both arms)
+    cameras: dict[str, CameraConfig] = field(default_factory=dict)
+

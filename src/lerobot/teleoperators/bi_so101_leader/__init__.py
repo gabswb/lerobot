@@ -14,9 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .config import TeleoperatorConfig
-from .teleoperator import Teleoperator
-from .utils import TeleopEvents, make_teleoperator_from_config
+from .bi_so101_leader import BiSO101Leader
+from .config_bi_so101_leader import BiSO101LeaderConfig
 
-# Import teleoperator configs to ensure they're registered with draccus ChoiceRegistry
-from .bi_so101_leader import BiSO101LeaderConfig  # noqa: F401

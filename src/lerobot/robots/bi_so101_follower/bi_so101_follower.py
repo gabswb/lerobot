@@ -20,29 +20,28 @@ from functools import cached_property
 from typing import Any
 
 from lerobot.cameras.utils import make_cameras_from_configs
-from lerobot.robots.so100_follower import SO100Follower
-from lerobot.robots.so100_follower.config_so100_follower import SO100FollowerConfig
+from lerobot.robots.so101_follower import SO101Follower
+from lerobot.robots.so101_follower.config_so101_follower import SO101FollowerConfig
 
 from ..robot import Robot
-from .config_bi_so100_follower import BiSO100FollowerConfig
+from .config_bi_so101_follower import BiSO101FollowerConfig
 
 logger = logging.getLogger(__name__)
 
 
-class BiSO100Follower(Robot):
+class BiSO101Follower(Robot):
     """
-    [Bimanual SO-100 Follower Arms](https://github.com/TheRobotStudio/SO-ARM100) designed by TheRobotStudio
-    This bimanual robot can also be easily adapted to use SO-101 follower arms, just replace the SO100Follower class with SO101Follower and SO100FollowerConfig with SO101FollowerConfig.
+    [Bimanual SO-101 Follower Arms](https://github.com/TheRobotStudio/SO-ARM100) designed by TheRobotStudio and Hugging Face
     """
 
-    config_class = BiSO100FollowerConfig
-    name = "bi_so100_follower"
+    config_class = BiSO101FollowerConfig
+    name = "bi_so101_follower"
 
-    def __init__(self, config: BiSO100FollowerConfig):
+    def __init__(self, config: BiSO101FollowerConfig):
         super().__init__(config)
         self.config = config
 
-        left_arm_config = SO100FollowerConfig(
+        left_arm_config = SO101FollowerConfig(
             id=config.left_arm_id or (f"{config.id}_left" if config.id else None),
             calibration_dir=config.calibration_dir,
             port=config.left_arm_port,
@@ -52,7 +51,7 @@ class BiSO100Follower(Robot):
             cameras={},
         )
 
-        right_arm_config = SO100FollowerConfig(
+        right_arm_config = SO101FollowerConfig(
             id=config.right_arm_id or (f"{config.id}_right" if config.id else None),
             calibration_dir=config.calibration_dir,
             port=config.right_arm_port,
@@ -62,8 +61,8 @@ class BiSO100Follower(Robot):
             cameras={},
         )
 
-        self.left_arm = SO100Follower(left_arm_config)
-        self.right_arm = SO100Follower(right_arm_config)
+        self.left_arm = SO101Follower(left_arm_config)
+        self.right_arm = SO101Follower(right_arm_config)
         self.cameras = make_cameras_from_configs(config.cameras)
 
     @property
@@ -161,3 +160,4 @@ class BiSO100Follower(Robot):
 
         for cam in self.cameras.values():
             cam.disconnect()
+

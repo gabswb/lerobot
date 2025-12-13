@@ -13,6 +13,7 @@
 # limitations under the License.
 import builtins
 import datetime as dt
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,7 @@ TRAIN_CONFIG_NAME = "train_config.json"
 class TrainPipelineConfig(HubMixin):
     dataset: DatasetConfig
     env: envs.EnvConfig | None = None
+    eval_dataset: DatasetConfig | None = None
     policy: PreTrainedConfig | None = None
     # Set `dir` to where you would like to save all of the run outputs. If you run another training session
     # with the same value for `dir` its contents will be overwritten unless you set `resume` to true.
@@ -129,6 +131,18 @@ class TrainPipelineConfig(HubMixin):
             raise ValueError(
                 "'policy.repo_id' argument missing. Please specify it to push the model to the hub."
             )
+
+        if self.eval_freq > 0:
+            if self.eval_dataset is not None and self.env is not None:
+                logging.warning(
+                    "Both eval_dataset and env are specified. "
+                    "Evaluation will run on both: dataset-based evaluation and environment-based evaluation."
+                )
+            elif self.eval_dataset is None and self.env is None:
+                logging.warning(
+                    f"eval_freq={self.eval_freq} is set but neither eval_dataset nor env is specified. "
+                    "No evaluation will be performed during training."
+                )
 
     @classmethod
     def __get_path_fields__(cls) -> list[str]:
