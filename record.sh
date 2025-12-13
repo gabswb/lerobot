@@ -40,4 +40,5 @@ lerobot-record \
     --dataset.num_episodes=5 \
     --dataset.single_task="Test" \
     --robot.cameras="{ front: ${CAM_FRONT} }" \
-    --dataset.push_to_hub=true
+    --dataset.push_to_hub=true \
+    --resume=true

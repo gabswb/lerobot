@@ -1,9 +1,9 @@
 lerobot-teleoperate \
   --robot.type=bi_so101_follower \
-  --robot.left_arm_port=/dev/tty.usbmodem5AB90672281 \
-  --robot.right_arm_port=/dev/tty.usbmodem59700731871 \
-  --robot.left_arm_id=f1 \
-  --robot.right_arm_id=f0 \
+  --robot.right_arm_port=/dev/tty.usbmodem5AB90672281 \
+  --robot.left_arm_port=/dev/tty.usbmodem59700731871 \
+  --robot.right_arm_id=f1 \
+  --robot.left_arm_id=f0 \
   --teleop.type=bi_so101_leader \
   --teleop.left_arm_port=/dev/tty.usbmodem5A460819611 \
   --teleop.right_arm_port=/dev/tty.usbmodem5AB90680581 \
