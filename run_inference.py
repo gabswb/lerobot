@@ -15,15 +15,19 @@ import time
 # Configuration variables - edit these to match your setup
 POLICY_TYPE = "act"  # Either "act" or "smolvla"
 POLICY_ID = "tms-gvd/act-pick-place"  # Hugging Face Hub policy ID
-PORT = "/dev/tty.usbmodem5AB90672281"  # Robot port
+LEFT_ARM_PORT = "/dev/tty.usbmodem59700731871"  # Left arm port
+RIGHT_ARM_PORT = "/dev/tty.usbmodem5AB90672281"  # Right arm port
 FPS = 30  # Frequency (Hz) for the rollout loop
-ROBOT_ID = "f1"  # Robot ID
+LEFT_ARM_ID = "f0"  # Left arm ID
+RIGHT_ARM_ID = "f1"  # Right arm ID
 
 # Camera configuration - list of camera configs, or empty list to disable cameras
 # Each camera config is a dict with: name, index, width, height, fps (fps can be None to use FPS)
 CAMERAS = [
-    {"name": "front", "index": 1, "width": 640, "height": 480, "fps": 30},
-    {"name": "top", "index": 0, "width": 640, "height": 480, "fps": 30},
+    {"name": "left", "index": 1, "width": 640, "height": 480, "fps": 30},
+    {"name": "right", "index": 2, "width": 640, "height": 480, "fps": 30},
+    {"name": "top", "index": 3, "width": 640, "height": 480, "fps": 30},
+    {"name": "scanner", "index": 0, "width": 640, "height": 480, "fps": 30},
 ]
 # Example with no cameras:
 # CAMERAS = []
@@ -42,7 +46,7 @@ CHUNK_SIZE_THRESHOLD = 0.2  # Threshold for sending observations (0-1, lower = s
 DURATION = None  # Duration in seconds, or None to run indefinitely
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
-from lerobot.robots.so101_follower.config_so101_follower import SO101FollowerConfig
+from lerobot.robots.bi_so101_follower.config_bi_so101_follower import BiSO101FollowerConfig
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 if USE_ASYNC_INFERENCE:
@@ -88,7 +92,7 @@ def run_async_inference():
     time.sleep(2)
     print("Policy server started")
 
-    print(f"Initializing SO101 robot on port {PORT}")
+    print(f"Initializing bimanual SO101 robot on ports {LEFT_ARM_PORT} (left) and {RIGHT_ARM_PORT} (right)")
     # Configure cameras
     cameras_dict = {}
     for camera_config in CAMERAS:
@@ -104,7 +108,13 @@ def run_async_inference():
         print(f"Configured camera '{camera_config['name']}' with index {camera_config['index']} ({camera_config['width']}x{camera_config['height']} @ {camera_fps} fps)")
     
     # Create robot configuration
-    robot_config = SO101FollowerConfig(port=PORT, id=ROBOT_ID, cameras=cameras_dict)
+    robot_config = BiSO101FollowerConfig(
+        left_arm_port=LEFT_ARM_PORT,
+        right_arm_port=RIGHT_ARM_PORT,
+        left_arm_id=LEFT_ARM_ID,
+        right_arm_id=RIGHT_ARM_ID,
+        cameras=cameras_dict
+    )
 
     # Create robot client configuration
     client_config = RobotClientConfig(
@@ -183,7 +193,7 @@ def run_sync_inference():
     policy = policy_class.from_pretrained(POLICY_ID)
     policy.eval()
 
-    print(f"Initializing SO101 robot on port {PORT}")
+    print(f"Initializing bimanual SO101 robot on ports {LEFT_ARM_PORT} (left) and {RIGHT_ARM_PORT} (right)")
     # Configure cameras
     cameras_dict = {}
     for camera_config in CAMERAS:
@@ -199,7 +209,13 @@ def run_sync_inference():
         print(f"Configured camera '{camera_config['name']}' with index {camera_config['index']} ({camera_config['width']}x{camera_config['height']} @ {camera_fps} fps)")
     
     # Create robot configuration
-    robot_config = SO101FollowerConfig(port=PORT, id=ROBOT_ID, cameras=cameras_dict)
+    robot_config = BiSO101FollowerConfig(
+        left_arm_port=LEFT_ARM_PORT,
+        right_arm_port=RIGHT_ARM_PORT,
+        left_arm_id=LEFT_ARM_ID,
+        right_arm_id=RIGHT_ARM_ID,
+        cameras=cameras_dict
+    )
 
     robot = make_robot_from_config(robot_config)
     robot.connect()
