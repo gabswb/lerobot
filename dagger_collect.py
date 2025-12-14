@@ -29,44 +29,44 @@ from pathlib import Path
 
 # Policy
 POLICY_TYPE = "act"  # "act" or "smolvla"
-POLICY_ID = "tms-gvd/act-pick-place"  # HF repo id or local path
+POLICY_ID = "tms-gvd/act-scan-v2-150-20k"  # HF repo id or local path
 TASK = ""  # Optional task string passed to the policy (often unused for ACT)
 
 # Robot (bimanual SO101 follower)
-LEFT_ARM_PORT = "/dev/tty.usbmodemLEFT_FOLLOWER"  # TODO: set
-RIGHT_ARM_PORT = "/dev/tty.usbmodemRIGHT_FOLLOWER"  # TODO: set
+LEFT_ARM_PORT = "/dev/f0"  # TODO: set
+RIGHT_ARM_PORT = "/dev/f1"  # TODO: set
 ROBOT_ID = "bimanual_follower"
-LEFT_ARM_ID = None  # optional calibration id, else uses f"{ROBOT_ID}_left"
-RIGHT_ARM_ID = None  # optional calibration id, else uses f"{ROBOT_ID}_right"
+LEFT_ARM_ID = "f0"  # optional calibration id, else uses f"{ROBOT_ID}_left"
+RIGHT_ARM_ID = "f1"  # optional calibration id, else uses f"{ROBOT_ID}_right"
 USE_DEGREES = False
 LEFT_ARM_MAX_RELATIVE_TARGET = None  # e.g. 5.0 for safety clipping, or None
 RIGHT_ARM_MAX_RELATIVE_TARGET = None  # e.g. 5.0 for safety clipping, or None
 
 # Teleop (bimanual SO101 leader)
-LEFT_TELEOP_PORT = "/dev/tty.usbmodemLEFT_LEADER"  # TODO: set
-RIGHT_TELEOP_PORT = "/dev/tty.usbmodemRIGHT_LEADER"  # TODO: set
+LEFT_TELEOP_PORT = "/dev/l0"  # TODO: set
+RIGHT_TELEOP_PORT = "/dev/l1"  # TODO: set
 TELEOP_ID = "bimanual_leader"
-LEFT_TELEOP_ID = None  # optional calibration id, else uses f"{TELEOP_ID}_left"
-RIGHT_TELEOP_ID = None  # optional calibration id, else uses f"{TELEOP_ID}_right"
+LEFT_TELEOP_ID = "l0"  # optional calibration id, else uses f"{TELEOP_ID}_left"
+RIGHT_TELEOP_ID = "l1"  # optional calibration id, else uses f"{TELEOP_ID}_right"
 
 # Rollout settings
-FPS = 30
+FPS = 15
 EPISODE_TIME_S = 60.0
 NUM_EPISODES = 10
 
 # Cameras (OpenCV). Set to [] to disable.
 # Each entry: {"name": ..., "index": ..., "width": ..., "height": ..., "fps": ...} (fps can be None)
 CAMERAS = [
-    # {"name": "front", "index": 0, "width": 640, "height": 480, "fps": 30},
-]
-
-# Reset phase (teleop-only) duration between saved episodes.
+    {"name": "left", "index": 4, "width": 640, "height": 480, "fps": 30},
+    {"name": "right", "index": 2, "width": 640, "height": 480, "fps": 30},
+    {"name": "top", "index": 8, "width": 640, "height": 480, "fps": 30},
+    {"name": "scanner", "index": 6, "width": 640, "height": 480, "fps": 30},
+]# Reset phase (teleop-only) duration between saved episodes.
 RESET_TIME_S = 10.0
 
 # Dataset recording (set DATASET_DIR=None to disable recording)
-DATASET_DIR = None  # e.g. Path("data/dagger_run_001")
-DATASET_REPO_ID = "local/dagger"
-DATASET_VIDEO = False
+DATASET_REPO_ID = "tms-gvd/test-dagger"
+DATASET_VIDEO = True
 RECORD_PRE_ROLLOUT = False
 
 # Visualization (rerun)
@@ -161,11 +161,24 @@ def _sync_bimanual_leader_to_follower_action(bi_leader, follower_sent_action):
     if right_goal:
         bi_leader.right_arm.bus.sync_write("Goal_Position", right_goal)
 
+def _disable_leader_torque(bi_leader):
+    """Disable torque on leader arms to allow free movement during teleop."""
+    bi_leader.left_arm.bus.disable_torque()
+    bi_leader.right_arm.bus.disable_torque()
+
+def _enable_leader_torque(bi_leader):
+    """Enable torque on leader arms to allow position control during policy mode."""
+    bi_leader.left_arm.bus.enable_torque()
+    bi_leader.right_arm.bus.enable_torque()
+
 def _reset_phase(robot, teleop, robot_action_processor, robot_observation_processor, teleop_action_processor, keys, log_rerun_data, precise_sleep):
     if RESET_TIME_S is None or RESET_TIME_S <= 0:
         return
 
     print(f"Reset phase ({RESET_TIME_S}s). Teleoperate to reset, right arrow to finish early.")
+    # Disable leader torque for free movement during reset phase
+    _disable_leader_torque(teleop)
+    
     start_t = time.perf_counter()
     while (time.perf_counter() - start_t) < RESET_TIME_S and not keys.stop_all:
         if keys.end_episode:
@@ -256,12 +269,7 @@ def main():
     policy.eval()
 
     dataset = None
-    if DATASET_DIR is not None:
-        if not isinstance(DATASET_DIR, Path):
-            DATASET_DIR = Path(DATASET_DIR)
-        if DATASET_DIR.exists():
-            raise ValueError(f"DATASET_DIR must not exist: {DATASET_DIR}")
-
+    if True:
         action_features = hw_to_dataset_features(robot.action_features, ACTION, use_video=DATASET_VIDEO)
         obs_features = hw_to_dataset_features(robot.observation_features, OBS_STR, use_video=DATASET_VIDEO)
         dataset_features = {**action_features, **obs_features}
@@ -270,7 +278,7 @@ def main():
             repo_id=DATASET_REPO_ID,
             fps=FPS,
             features=dataset_features,
-            root=DATASET_DIR,
+            root=None,
             robot_type=robot.name,
             use_videos=DATASET_VIDEO,
             image_writer_threads=(4 * len(cameras)) if cameras else 0,
@@ -327,6 +335,9 @@ def main():
 
             attempt_idx += 1
             print(f"\nEpisode {saved_episodes + 1}/{NUM_EPISODES}: pre-rollout teleop (press 'p' to start)")
+            # Disable leader torque for free movement during pre-rollout teleop
+            _disable_leader_torque(teleop)
+            
             while not keys.start_rollout and not keys.stop_all:
                 t0 = time.perf_counter()
                 obs = robot.get_observation()
@@ -356,6 +367,10 @@ def main():
             keys.rerecord_episode = False
 
             print("Rollout started.")
+            # Enable leader torque if syncing is enabled (starting in policy mode)
+            if SYNC_LEADER_DURING_POLICY:
+                _enable_leader_torque(teleop)
+            
             policy.reset()
             preprocessor.reset()
             postprocessor.reset()
@@ -371,7 +386,13 @@ def main():
 
                 mode = "teleop" if keys.intervene else "policy"
                 if mode != keys.last_mode:
-                    print("Intervening (teleop).") if mode == "teleop" else print("Back to policy.")
+                    if mode == "teleop":
+                        print("Intervening (teleop).")
+                        _disable_leader_torque(teleop)
+                    else:
+                        print("Back to policy.")
+                        if SYNC_LEADER_DURING_POLICY:
+                            _enable_leader_torque(teleop)
                     keys.last_mode = mode
 
                 if mode == "teleop":

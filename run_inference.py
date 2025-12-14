@@ -14,9 +14,9 @@ import time
 
 # Configuration variables - edit these to match your setup
 POLICY_TYPE = "act"  # Either "act" or "smolvla"
-POLICY_ID = "tms-gvd/act-pick-place"  # Hugging Face Hub policy ID
-LEFT_ARM_PORT = "/dev/tty.usbmodem59700731871"  # Left arm port
-RIGHT_ARM_PORT = "/dev/tty.usbmodem5AB90672281"  # Right arm port
+POLICY_ID = "tms-gvd/act-scan-v3"  # Hugging Face Hub policy ID
+LEFT_ARM_PORT = "/dev/f0"  # Left arm port /dev/tty.usbmodem59700731871 or /dev/ttyACM1
+RIGHT_ARM_PORT = "/dev/f1"  # Right arm port /dev/tty.usbmodem5AB90672281 or /dev/ttyACM3
 FPS = 30  # Frequency (Hz) for the rollout loop
 LEFT_ARM_ID = "f0"  # Left arm ID
 RIGHT_ARM_ID = "f1"  # Right arm ID
@@ -24,22 +24,22 @@ RIGHT_ARM_ID = "f1"  # Right arm ID
 # Camera configuration - list of camera configs, or empty list to disable cameras
 # Each camera config is a dict with: name, index, width, height, fps (fps can be None to use FPS)
 CAMERAS = [
-    {"name": "left", "index": 1, "width": 640, "height": 480, "fps": 30},
+    {"name": "left", "index": 4, "width": 640, "height": 480, "fps": 30},
     {"name": "right", "index": 2, "width": 640, "height": 480, "fps": 30},
-    {"name": "top", "index": 3, "width": 640, "height": 480, "fps": 30},
-    {"name": "scanner", "index": 0, "width": 640, "height": 480, "fps": 30},
+    {"name": "top", "index": 8, "width": 640, "height": 480, "fps": 30},
+    {"name": "scanner", "index": 6, "width": 640, "height": 480, "fps": 30},
 ]
 # Example with no cameras:
 # CAMERAS = []
 
 # Inference mode configuration
-USE_ASYNC_INFERENCE = False  # Set to False to use synchronous inference
+USE_ASYNC_INFERENCE = True  # Set to False to use synchronous inference
 
 # Async inference configuration (only used if USE_ASYNC_INFERENCE=True)
 SERVER_HOST = "127.0.0.1"  # Policy server host address
 SERVER_PORT = 8080  # Policy server port
 ACTIONS_PER_CHUNK = 100  # Number of actions per chunk
-CHUNK_SIZE_THRESHOLD = 0.2  # Threshold for sending observations (0-1, lower = send more frequently)
+CHUNK_SIZE_THRESHOLD = 0.1  # Threshold for sending observations (0-1, lower = send more frequently)
 # Note: chunk_size_threshold must be between 0 and 1. If you meant actions_per_chunk=20, that's set above.
 
 # Duration limit (None = run indefinitely until Ctrl+C)
