@@ -9,9 +9,12 @@ This script supports both synchronous and asynchronous inference modes.
 - Asynchronous: Decouples action prediction from execution, eliminating idle frames
 """
 
+import argparse
+import asyncio
 import threading
 import time
 import torch
+from typing import Any, Optional
 
 # Configuration variables - edit these to match your setup
 POLICY_TYPE = "act"  # Either "act" or "smolvla"
@@ -53,6 +56,149 @@ from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.robots.bi_so101_follower.config_bi_so101_follower import BiSO101FollowerConfig
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
+
+class WebappController:
+    """
+    Control inference execution via WebSocket messages (from the Santa webapp).
+
+    - action=start  => resume inference loop
+    - action=pause  => pause inference loop (best-effort stop)
+    """
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+        self._paused = threading.Event()
+        self._paused.set()  # start paused in webapp mode
+        self._last_pause_stop_ts = 0.0
+
+    def is_paused(self) -> bool:
+        return self.enabled and self._paused.is_set()
+
+    def resume(self) -> None:
+        if not self.enabled:
+            return
+        self._paused.clear()
+
+    def pause(self) -> None:
+        if not self.enabled:
+            return
+        self._paused.set()
+
+    def should_send_stop(self, every_s: float = 0.4) -> bool:
+        now = time.time()
+        if now - self._last_pause_stop_ts >= every_s:
+            self._last_pause_stop_ts = now
+            return True
+        return False
+
+
+async def _ws_control_loop(ws_url: str, controller: WebappController) -> None:
+    try:
+        import websockets  # type: ignore
+    except Exception as e:
+        print(f"[webapp] Missing dependency 'websockets': {e}")
+        return
+
+    while True:
+        try:
+            async with websockets.connect(ws_url) as ws:
+                print(f"[webapp] Connected to {ws_url}")
+                # Tell dashboards our initial state.
+                await ws.send(
+                    '{"type":"robot_inference_status","source":"inference","state":"paused"}'
+                )
+                async for raw in ws:
+                    try:
+                        import json
+
+                        msg = json.loads(raw)
+                    except Exception:
+                        continue
+                    if msg.get("type") != "robot_inference_control":
+                        continue
+                    action = msg.get("action")
+                    if not isinstance(action, str):
+                        continue
+                    action = action.strip().lower()
+                    if action == "start":
+                        controller.resume()
+                        await ws.send(
+                            '{"type":"robot_inference_status","source":"inference","state":"running"}'
+                        )
+                        print("[webapp] start")
+                    elif action == "pause":
+                        controller.pause()
+                        await ws.send(
+                            '{"type":"robot_inference_status","source":"inference","state":"paused"}'
+                        )
+                        print("[webapp] pause")
+        except Exception as e:
+            print(f"[webapp] Disconnected ({e}); retrying...")
+            await asyncio.sleep(1.0)
+
+
+def _start_ws_thread(ws_url: str, controller: WebappController) -> threading.Thread:
+    t = threading.Thread(target=lambda: asyncio.run(_ws_control_loop(ws_url, controller)), daemon=True)
+    t.start()
+    return t
+
+
+def _try_stop_robot(robot: Any, last_action: Optional[Any]) -> None:
+    # Best-effort: prefer a native stop method if available.
+    stop_fn = getattr(robot, "stop", None)
+    if callable(stop_fn):
+        try:
+            stop_fn()
+            return
+        except Exception:
+            pass
+
+    if last_action is None:
+        return
+
+    zeroed = _zero_like(last_action)
+    if zeroed is None:
+        return
+    try:
+        robot.send_action(zeroed)
+    except Exception:
+        pass
+
+
+def _zero_like(x: Any) -> Optional[Any]:
+    # Recursively zero common action containers.
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        np = None
+
+    if isinstance(x, dict):
+        out = {}
+        for k, v in x.items():
+            zv = _zero_like(v)
+            if zv is None:
+                return None
+            out[k] = zv
+        return out
+
+    if np is not None and isinstance(x, np.ndarray):
+        return np.zeros_like(x)
+
+    if torch.is_tensor(x):
+        return torch.zeros_like(x)
+
+    if isinstance(x, (list, tuple)):
+        seq = []
+        for v in x:
+            zv = _zero_like(v)
+            if zv is None:
+                return None
+            seq.append(zv)
+        return type(x)(seq)
+
+    # Unknown type
+    return None
+
 if USE_ASYNC_INFERENCE:
     from lerobot.async_inference.configs import PolicyServerConfig, RobotClientConfig
     from lerobot.async_inference.policy_server import serve as serve_policy_server
@@ -75,7 +221,7 @@ def start_policy_server(host: str, port: int):
     serve_policy_server(config)
 
 
-def run_async_inference():
+def run_async_inference(controller: WebappController):
     """Run inference using asynchronous mode."""
     print(f"Starting asynchronous inference with {POLICY_TYPE} policy: {POLICY_ID}")
     print(f"Policy server will run on {SERVER_HOST}:{SERVER_PORT}")
@@ -148,6 +294,7 @@ def run_async_inference():
         action_receiver_thread = threading.Thread(target=client.receive_actions, daemon=True)
         action_receiver_thread.start()
 
+        last_action = None
         try:
             # Custom control loop with Rerun logging
             client.start_barrier.wait()
@@ -155,12 +302,19 @@ def run_async_inference():
 
             while client.running:
                 control_loop_start = time.perf_counter()
+
+                if controller.is_paused():
+                    if controller.should_send_stop():
+                        _try_stop_robot(client.robot, last_action)
+                    time.sleep(max(0, client.config.environment_dt - (time.perf_counter() - control_loop_start)))
+                    continue
                 
                 # Perform actions when available
                 if client.actions_available():
                     performed_action = client.control_loop_action(verbose=False)
                     # Log action to Rerun
                     if performed_action:
+                        last_action = performed_action
                         log_rerun_data(action=performed_action)
 
                 # Stream observations to the remote policy server
@@ -185,7 +339,7 @@ def run_async_inference():
             print("Done")
 
 
-def run_sync_inference():
+def run_sync_inference(controller: WebappController):
     """Run inference using synchronous mode."""
     print(f"Loading {POLICY_TYPE} policy from hub: {POLICY_ID}")
     
@@ -263,6 +417,7 @@ def run_sync_inference():
     print("Press Ctrl+C to stop")
 
     start_time = time.perf_counter()
+    last_action_to_send = None
     try:
         while True:
             loop_start = time.perf_counter()
@@ -273,6 +428,12 @@ def run_sync_inference():
                 if elapsed >= DURATION:
                     print(f"Reached duration limit of {DURATION} seconds")
                     break
+
+            if controller.is_paused():
+                if controller.should_send_stop():
+                    _try_stop_robot(robot, last_action_to_send)
+                precise_sleep(1.0 / FPS - (time.perf_counter() - loop_start))
+                continue
 
             # Get observation from robot
             obs = robot.get_observation()
@@ -308,6 +469,7 @@ def run_sync_inference():
 
             # Send action to robot
             robot.send_action(robot_action_to_send)
+            last_action_to_send = robot_action_to_send
 
             # Maintain frequency
             dt = time.perf_counter() - loop_start
@@ -322,10 +484,28 @@ def run_sync_inference():
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--webapp",
+        action="store_true",
+        help="Enable WebSocket control from the Santa webapp (start/pause).",
+    )
+    parser.add_argument(
+        "--ws-url",
+        default="ws://127.0.0.1:8765",
+        help="WebSocket URL for RobotVisionBeacon host server.",
+    )
+    args = parser.parse_args()
+
+    controller = WebappController(enabled=bool(args.webapp))
+    if args.webapp:
+        _start_ws_thread(args.ws_url, controller)
+        print("[webapp] Waiting for START command from webapp…")
+
     if USE_ASYNC_INFERENCE:
-        run_async_inference()
+        run_async_inference(controller)
     else:
-        run_sync_inference()
+        run_sync_inference(controller)
 
 
 if __name__ == "__main__":
