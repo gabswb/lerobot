@@ -15,7 +15,7 @@ import torch
 
 # Configuration variables - edit these to match your setup
 POLICY_TYPE = "act"  # Either "act" or "smolvla"
-POLICY_ID = "tms-gvd/act-scan-v3-25k"  # Hugging Face Hub policy ID
+POLICY_ID = "tms-gvd/act-finetune-35k"  # Hugging Face Hub policy ID
 LEFT_ARM_PORT = "/dev/f0"  # Left arm port /dev/tty.usbmodem59700731871 or /dev/ttyACM1
 RIGHT_ARM_PORT = "/dev/f1"  # Right arm port /dev/tty.usbmodem5AB90672281 or /dev/ttyACM3
 FPS = 30  # Frequency (Hz) for the rollout loop
@@ -25,10 +25,10 @@ RIGHT_ARM_ID = "f1"  # Right arm ID
 # Camera configuration - list of camera configs, or empty list to disable cameras
 # Each camera config is a dict with: name, index, width, height, fps (fps can be None to use FPS)
 CAMERAS = [
-    {"name": "left", "index": 4, "width": 640, "height": 480, "fps": 30},
-    {"name": "right", "index": 2, "width": 640, "height": 480, "fps": 30},
-    {"name": "top", "index": 8, "width": 640, "height": 480, "fps": 30},
-    {"name": "scanner", "index": 6, "width": 640, "height": 480, "fps": 30},
+    {"name": "left", "index": 6, "width": 640, "height": 480, "fps": 30},
+    {"name": "right", "index": 8, "width": 640, "height": 480, "fps": 30},
+    {"name": "top", "index": 4, "width": 640, "height": 480, "fps": 30},
+    {"name": "scanner", "index": 2, "width": 640, "height": 480, "fps": 30},
 ]
 # Example with no cameras:
 # CAMERAS = []
