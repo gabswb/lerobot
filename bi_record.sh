@@ -18,11 +18,10 @@ lerobot-record \
     scanner: {"type": "opencv", "index_or_path": 6, "width": 640, "height": 480, "fps": 30}
   }' \
   --display_data=true \
-  --dataset.repo_id="tms-gvd/scan-v2-cycling" \
+  --dataset.repo_id="tms-gvd/scan-v2-cycling-30" \
   --dataset.num_episodes=50 \
   --dataset.single_task="Take an item, scan it then move it to the corresponding area" \
   --dataset.episode_time_s=500 \
   --dataset.reset_time_s=60 \
   --dataset.push_to_hub=true \
-  --resume=true
 

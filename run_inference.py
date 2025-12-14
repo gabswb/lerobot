@@ -11,10 +11,11 @@ This script supports both synchronous and asynchronous inference modes.
 
 import threading
 import time
+import torch
 
 # Configuration variables - edit these to match your setup
 POLICY_TYPE = "act"  # Either "act" or "smolvla"
-POLICY_ID = "tms-gvd/act-scan-v3"  # Hugging Face Hub policy ID
+POLICY_ID = "tms-gvd/act-scan-v3-25k"  # Hugging Face Hub policy ID
 LEFT_ARM_PORT = "/dev/f0"  # Left arm port /dev/tty.usbmodem59700731871 or /dev/ttyACM1
 RIGHT_ARM_PORT = "/dev/f1"  # Right arm port /dev/tty.usbmodem5AB90672281 or /dev/ttyACM3
 FPS = 30  # Frequency (Hz) for the rollout loop
@@ -33,7 +34,7 @@ CAMERAS = [
 # CAMERAS = []
 
 # Inference mode configuration
-USE_ASYNC_INFERENCE = True  # Set to False to use synchronous inference
+USE_ASYNC_INFERENCE = False  # Set to False to use synchronous inference
 
 # Async inference configuration (only used if USE_ASYNC_INFERENCE=True)
 SERVER_HOST = "127.0.0.1"  # Policy server host address
@@ -44,6 +45,9 @@ CHUNK_SIZE_THRESHOLD = 0.1  # Threshold for sending observations (0-1, lower = s
 
 # Duration limit (None = run indefinitely until Ctrl+C)
 DURATION = None  # Duration in seconds, or None to run indefinitely
+
+USE_TORCH_COMPILE = True 
+TORCH_COMPILE_MODE = "default"
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig
 from lerobot.robots.bi_so101_follower.config_bi_so101_follower import BiSO101FollowerConfig
@@ -192,6 +196,14 @@ def run_sync_inference():
     policy_class = get_policy_class(POLICY_TYPE)
     policy = policy_class.from_pretrained(POLICY_ID)
     policy.eval()
+    
+    if USE_TORCH_COMPILE:
+        print(f"Compiling policy with torch.compile (mode={TORCH_COMPILE_MODE})...")
+        try:
+            policy = torch.compile(policy, mode=TORCH_COMPILE_MODE)
+            print("Policy compiled successfully")
+        except Exception as e:
+            print(f"Warning: torch.compile failed ({e}), continuing without compilation")
 
     print(f"Initializing bimanual SO101 robot on ports {LEFT_ARM_PORT} (left) and {RIGHT_ARM_PORT} (right)")
     # Configure cameras
